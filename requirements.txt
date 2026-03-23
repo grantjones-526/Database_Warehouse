@@ -1,0 +1,9 @@
+yfinance
+fredapi
+requests
+pandas
+mysql-connector-python
+psycopg2-binary
+pymongo
+streamlit
+matplotlib
