@@ -11,7 +11,7 @@ import os
 
 # Add parent directory so we can import the query handler
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
-from ollama.query_handler import run_nl_query
+from claude.query_handler import run_nl_query
 
 
 def get_postgres_connection():
