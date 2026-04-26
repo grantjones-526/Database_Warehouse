@@ -8,3 +8,4 @@ pymongo
 streamlit
 matplotlib
 anthropic
+statsmodels

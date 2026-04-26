@@ -169,15 +169,15 @@ QUERIES = {
         SELECT a.ticker, a.sector,
                ROUND(AVG(f.daily_return)::numeric, 4) AS avg_return,
                ROUND(AVG(f.vol_30)::numeric, 4) AS avg_vol,
-               ROUND(AVG(f.news_count)::numeric, 2) AS avg_news
+               ROUND(AVG(f.news_count)::numeric, 4) AS avg_news
         FROM fact_market_data f
         JOIN dim_date d ON f.date_key = d.date_key
         JOIN dim_asset a ON f.asset_key = a.asset_key
         {where}
         GROUP BY a.ticker, a.sector
-        HAVING AVG(f.daily_return) > 0.001
-           AND AVG(f.vol_30) < 0.02
-           AND AVG(f.news_count) > 2
+        HAVING AVG(f.daily_return) > 0.01
+           AND AVG(f.vol_30) < 2.5
+           AND AVG(f.news_count) >= 0
         ORDER BY avg_return DESC
     """,
 }
@@ -222,9 +222,10 @@ with tab1:
             else:
                 st.dataframe(df, use_container_width=True)
 
-                numeric_cols = df.select_dtypes(include="number").columns.tolist()
-                if len(numeric_cols) >= 1:
-                    st.bar_chart(df.set_index(df.columns[0])[numeric_cols[0]])
+                index_col = df.columns[0]
+                numeric_cols = [c for c in df.select_dtypes(include="number").columns if c != index_col]
+                if numeric_cols:
+                    st.bar_chart(df.set_index(index_col)[numeric_cols[0]])
         except Exception as e:
             st.error(f"Query failed: {e}")
 
@@ -236,7 +237,7 @@ with tab1:
         )
         st.code(QUERIES[query_type].format(where=where_clause), language="sql")
 
-# --- Tab 2: Natural Language (Ollama) ---
+# --- Tab 2: Natural Language (Claude) ---
 with tab2:
     st.subheader("Ask a Question")
     st.caption(
@@ -253,15 +254,35 @@ with tab2:
         with st.spinner("Generating and executing query..."):
             result = run_nl_query(question)
 
-        if isinstance(result, list) and result and "error" in result[0]:
-            st.error(result[0]["error"])
-            if "generated_sql" in result[0]:
-                st.code(result[0]["generated_sql"], language="sql")
-        elif isinstance(result, dict) and "error" in result:
+        if isinstance(result, dict) and "error" in result:
             st.error(result["error"])
             if "generated_sql" in result:
                 st.code(result["generated_sql"], language="sql")
-        elif isinstance(result, dict) and "data" in result:
+
+        elif isinstance(result, dict) and result.get("type") == "prediction":
+            p = result["prediction"]
+            st.markdown(f"### {p['ticker']} — {p['model']} Forecast")
+            col1, col2, col3, col4 = st.columns(4)
+            col1.metric("Current Price", f"${p['current_price']}")
+            col2.metric(
+                "Predicted (5d)",
+                f"${p['predicted_price_5d']}",
+                delta=f"{p['predicted_change_pct']:+.2f}%",
+            )
+            col3.metric(
+                "80% CI (day 5)",
+                f"${p['ci_low_5d']} – ${p['ci_high_5d']}",
+            )
+            col4.metric("30d Volatility", str(p["avg_vol_30"]))
+            st.info(result["response"])
+            st.caption(
+                f"{p['model']} · {p['days_used']} trading days · "
+                f"AIC {p['aic']} · "
+                "Analysis informed by recent MongoDB news articles · "
+                "Not financial advice."
+            )
+
+        elif isinstance(result, dict) and result.get("type") == "sql":
             st.success("Query executed successfully.")
             with st.expander("Generated SQL"):
                 st.code(result["sql"], language="sql")
@@ -270,5 +291,6 @@ with tab2:
                 st.info("Query returned no results.")
             else:
                 st.dataframe(df, use_container_width=True)
+
         else:
             st.warning("Unexpected response format.")

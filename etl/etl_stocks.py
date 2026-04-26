@@ -18,7 +18,7 @@ TICKERS = {
 }
 
 START_DATE = "2021-01-01"
-END_DATE = "2026-01-01"
+END_DATE = str(date.today())
 
 
 def get_mysql_connection():

@@ -7,17 +7,45 @@ import os
 import requests
 from pymongo import MongoClient
 
-NEWSAPI_KEY = os.environ.get("NEWSAPI_KEY", "8123f514dd0746c4b84e1210dc3734ae")
+NEWSAPI_KEY = os.environ.get("NEWSAPI_KEY", "")
 
 SEARCH_TERMS = [
-    "federal reserve",
-    "S&P 500",
-    "stock market",
-    "interest rates",
-    "inflation",
-    "Tesla earnings",
-    "Apple earnings",
-    "Microsoft earnings",
+    # Market / macro
+    "federal reserve interest rates",
+    "S&P 500 stock market",
+    "inflation CPI economy",
+    "stock market rally selloff",
+    "nasdaq dow jones",
+    # Apple
+    "Apple AAPL stock",
+    "Apple earnings revenue",
+    "Apple iPhone iPad",
+    "Apple CEO Tim Cook",
+    "AAPL investor",
+    # Microsoft
+    "Microsoft MSFT stock",
+    "Microsoft earnings revenue",
+    "Microsoft Azure cloud",
+    "Microsoft AI Copilot",
+    "MSFT investor",
+    # Google / Alphabet
+    "Google Alphabet GOOGL stock",
+    "Google earnings revenue",
+    "Google AI Gemini",
+    "Alphabet advertising",
+    "GOOGL investor",
+    # Amazon
+    "Amazon AMZN stock",
+    "Amazon earnings revenue",
+    "Amazon AWS cloud",
+    "Amazon retail ecommerce",
+    "AMZN investor",
+    # Tesla
+    "Tesla TSLA stock",
+    "Tesla earnings revenue",
+    "Tesla EV electric vehicle",
+    "Tesla CEO Elon Musk",
+    "TSLA investor",
 ]
 
 KEYWORD_MAP = {
@@ -88,6 +116,10 @@ def fetch_articles(query):
 
 
 def main():
+    if not NEWSAPI_KEY:
+        print("ERROR: NEWSAPI_KEY is not set. Add it to your .env file.")
+        raise SystemExit(1)
+
     collection = get_mongo_collection()
 
     # Create unique index on URL to prevent duplicates across runs

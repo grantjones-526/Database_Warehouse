@@ -40,7 +40,8 @@ def get_mongo_collection():
 def build_dim_date(pg_cursor):
     """Generate dim_date from full date range."""
     print("Building dim_date...")
-    dates = pd.date_range("2021-01-01", "2026-01-01")
+    from datetime import date
+    dates = pd.date_range("2021-01-01", date.today())
     for d in dates:
         pg_cursor.execute(
             """
@@ -117,11 +118,33 @@ def build_fact_table(pg_cursor, mysql_cursor, news_counts, date_keys, asset_keys
     """Merge MySQL prices and MongoDB news counts into fact_market_data."""
     print("Building fact_market_data...")
 
+    # Ensure the unique constraint exists (init SQL only runs on first container creation)
+    pg_cursor.execute("""
+        DO $$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conname = 'uq_fact_date_asset'
+            ) THEN
+                -- Remove duplicate rows, keeping the latest (highest id) per (date_key, asset_key)
+                DELETE FROM fact_market_data
+                WHERE id NOT IN (
+                    SELECT MAX(id)
+                    FROM fact_market_data
+                    GROUP BY date_key, asset_key
+                );
+                ALTER TABLE fact_market_data
+                ADD CONSTRAINT uq_fact_date_asset UNIQUE (date_key, asset_key);
+            END IF;
+        END $$;
+    """)
+
     mysql_cursor.execute(
         "SELECT ticker, date, open, high, low, close, volume FROM daily_prices"
     )
     rows = mysql_cursor.fetchall()
-    total = 0
+    attempted = 0
+    inserted = 0
 
     for ticker, date_val, open_, high, low, close, volume in rows:
         date_key = date_keys.get(date_val)
@@ -137,16 +160,18 @@ def build_fact_table(pg_cursor, mysql_cursor, news_counts, date_keys, asset_keys
             INSERT INTO fact_market_data
             (date_key, asset_key, open, high, low, close, volume, daily_return, news_count)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (date_key, asset_key) DO NOTHING
+            ON CONFLICT (date_key, asset_key) DO UPDATE
+                SET news_count = EXCLUDED.news_count
             """,
             (date_key, asset_key, open_, high, low, close, volume, daily_return, news_count),
         )
-        total += 1
+        inserted += pg_cursor.rowcount
+        attempted += 1
 
-        if total % 5000 == 0:
-            print(f"  {total} fact rows inserted...")
+        if attempted % 5000 == 0:
+            print(f"  {attempted} rows processed...")
 
-    print(f"  {total} total fact rows inserted.")
+    print(f"  {inserted} rows inserted, {attempted - inserted} skipped (already existed).")
 
 
 def compute_window_metrics(pg_cursor):
